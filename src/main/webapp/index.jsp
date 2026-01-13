@@ -3,6 +3,7 @@
 <html>
 <head>
     <title>JSP - Salut Lume</title>
+
 </head>
 <body>
 <h1><%= "Hello World!" %>
