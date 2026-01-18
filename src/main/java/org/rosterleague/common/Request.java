@@ -1,14 +1,3 @@
-/*
- * Copyright (c), Eclipse Foundation, Inc. and its licensors.
- *
- * All rights reserved.
- *
- * This program and the accompanying materials are made available under the
- * terms of the Eclipse Distribution License v1.0, which is available at
- * https://www.eclipse.org/org/documents/edl-v10.php
- *
- * SPDX-License-Identifier: BSD-3-Clause
- */
 package org.rosterleague.common;
 
 import java.util.List;
@@ -64,4 +53,8 @@ public interface Request {
     void removeTeam(String teamId);
 
     void clearAllEntities();
+
+    void createGame(String leagueId, String homeTeamId, String awayTeamId, int hScore, int aScore);
+    java.util.List<org.rosterleague.entities.Game> getTeamGames(String teamId);
+    java.util.List<TeamStats> getLeagueStandings(String leagueId);
 }

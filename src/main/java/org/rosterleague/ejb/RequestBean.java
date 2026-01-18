@@ -18,6 +18,8 @@ import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+import java.util.Map;
+import java.util.HashMap;
 import jakarta.annotation.PostConstruct;
 import jakarta.ejb.EJBException;
 import jakarta.ejb.Stateless;
@@ -308,7 +310,6 @@ public class RequestBean implements Request, Serializable {
             CriteriaQuery<Player> cq = cb.createQuery(Player.class);
             if (cq != null) {
                 Root<Player> player = cq.from(Player.class);
-
                 cq.select(player);
                 TypedQuery<Player> q = em.createQuery(cq);
                 players = q.getResultList();
@@ -512,9 +513,22 @@ public class RequestBean implements Request, Serializable {
 
     @Override
     public void clearAllEntities() {
-        em.createQuery("DELETE FROM Player").executeUpdate();
-        em.createQuery("DELETE FROM Team").executeUpdate();
-        em.createQuery("DELETE FROM League").executeUpdate();
+        // Încercăm să ștergem jocurile. Dacă dă eroare (ex: tabelul nu există), ignorăm și continuăm.
+        try {
+            em.createQuery("DELETE FROM Game").executeUpdate();
+        } catch (Exception e) {
+            logger.log(Level.WARNING, "Nu s-au putut sterge jocurile (posibil prima rulare sau tabel inexistent): {0}", e.getMessage());
+        }
+
+        // Ștergem restul entităților (acestea ar trebui să funcționeze)
+        try {
+            em.createQuery("DELETE FROM Player").executeUpdate();
+            em.createQuery("DELETE FROM Team").executeUpdate();
+            em.createQuery("DELETE FROM League").executeUpdate();
+        } catch (Exception e) {
+            // Dacă aici apare o eroare, e o problemă serioasă, deci o aruncăm mai departe
+            throw new EJBException(e);
+        }
     }
 
     private List<PlayerDetails> copyPlayersToDetails(List<Player> players) {
@@ -524,5 +538,63 @@ public class RequestBean implements Request, Serializable {
             detailsList.add(playerDetails);
         }
         return detailsList;
+    }
+    @Override
+    public void createGame(String leagueId, String homeTeamId, String awayTeamId, int hScore, int aScore) {
+        try {
+            League league = em.find(League.class, leagueId);
+            Team home = em.find(Team.class, homeTeamId);
+            Team away = em.find(Team.class, awayTeamId);
+            Game game = new Game(league, home, away, hScore, aScore);
+            em.persist(game);
+        } catch (Exception ex) { throw new EJBException(ex); }
+    }
+
+    @Override
+    public List<Game> getTeamGames(String teamId) {
+        try {
+            Team team = em.find(Team.class, teamId);
+            TypedQuery<Game> query = em.createQuery(
+                    "SELECT g FROM Game g WHERE g.homeTeam = :team OR g.awayTeam = :team", Game.class);
+            query.setParameter("team", team);
+            return query.getResultList();
+        } catch (Exception ex) { throw new EJBException(ex); }
+    }
+
+    @Override
+    public List<TeamStats> getLeagueStandings(String leagueId) {
+        try {
+            League league = em.find(League.class, leagueId);
+            Map<String, TeamStats> statsMap = new HashMap<>();
+
+            // 1. Initializam toate echipele cu 0
+            for (Team t : league.getTeams()) {
+                statsMap.put(t.getId(), new TeamStats(t.getName()));
+            }
+
+            // 2. Calculam punctele din meciuri
+            TypedQuery<Game> query = em.createQuery("SELECT g FROM Game g WHERE g.league = :league", Game.class);
+            query.setParameter("league", league);
+            List<Game> games = query.getResultList();
+
+            for (Game g : games) {
+                TeamStats home = statsMap.get(g.getHomeTeam().getId());
+                TeamStats away = statsMap.get(g.getAwayTeam().getId());
+
+                if (home != null && away != null) {
+                    if (g.getHomeScore() > g.getAwayScore()) {
+                        home.addMatch(3); away.addMatch(0);
+                    } else if (g.getAwayScore() > g.getHomeScore()) {
+                        home.addMatch(0); away.addMatch(3);
+                    } else {
+                        home.addMatch(1); away.addMatch(1);
+                    }
+                }
+            }
+            // 3. Sortare
+            List<TeamStats> sortedList = new ArrayList<>(statsMap.values());
+            sortedList.sort((t1, t2) -> Integer.compare(t2.getPoints(), t1.getPoints()));
+            return sortedList;
+        } catch (Exception ex) { throw new EJBException(ex); }
     }
 }

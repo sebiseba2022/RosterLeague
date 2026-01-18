@@ -2,41 +2,116 @@ package org.rosterleague.servlet;
 
 import java.io.*;
 import java.util.List;
-
 import jakarta.inject.Inject;
 import jakarta.servlet.http.*;
 import jakarta.servlet.annotation.*;
-import org.rosterleague.common.LeagueDetails;
-import org.rosterleague.common.PlayerDetails;
-import org.rosterleague.common.Request;
-import org.rosterleague.common.TeamDetails;
+import org.rosterleague.common.*;
+import org.rosterleague.entities.Game;
 
 @WebServlet(name = "mainServlet", value = "/")
 public class MainServlet extends HttpServlet {
     @Inject
     Request ejbRequest;
 
-    PrintWriter printer;
-
     public void doGet(HttpServletRequest request, HttpServletResponse response) throws IOException {
+        PrintWriter out = response.getWriter();
+
         ejbRequest.clearAllEntities();
         insertInfo();
 
-        printer = response.getWriter();
-        response.setContentType("text/plain");
+        // 2. Setam tipul continutului la HTML
+        response.setContentType("text/html;charset=UTF-8");
 
-        getSomeInfo();
-        getMoreInfo();
-        removeInfo();
+        // 3. Generam pagina HTML cu Bootstrap
+        out.println("<!DOCTYPE html>");
+        out.println("<html lang='en'><head>");
+        out.println("<meta charset='UTF-8'>");
+        out.println("<meta name='viewport' content='width=device-width, initial-scale=1'>");
+        out.println("<title>Roster League Dashboard</title>");
+        // Bootstrap CDN
+        out.println("<link href='https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css' rel='stylesheet'>");
+        out.println("</head><body class='bg-light'>");
+
+        out.println("<div class='container py-5'>");
+        out.println("<h1 class='display-5 fw-bold text-center mb-5'>Roster League Management</h1>");
+
+        // --- CERINTA 1: CLASAMENT (League Standings) ---
+        // Afisam clasamentul pentru Liga 2
+        renderStandings(out, "L2", "Hermanstadt Basketball League");
+
+        // --- CERINTA 2: MECIURILE UNEI ECHIPE (Team Games) ---
+        // Afisam meciurile echipei T1
+        renderTeamGames(out, "T1", "Honey Bees Visalia");
+
+        out.println("</div>"); // End container
+        out.println("</body></html>");
+    }
+
+    private void renderStandings(PrintWriter out, String leagueId, String leagueName) {
+        out.println("<div class='card shadow-sm mb-5'>");
+        out.println("<div class='card-header bg-primary text-white'>");
+        out.println("<h4 class='my-0'>Clasament: " + leagueName + " (" + leagueId + ")</h4>");
+        out.println("</div>");
+        out.println("<div class='card-body'>");
+
+        out.println("<table class='table table-striped table-hover align-middle'>");
+        out.println("<thead class='table-dark'><tr><th>#</th><th>Echipa</th><th class='text-center'>Meciuri Jucate</th><th class='text-center'>Puncte</th></tr></thead>");
+        out.println("<tbody>");
+
+        List<TeamStats> standings = ejbRequest.getLeagueStandings(leagueId);
+
+        if (standings.isEmpty()) {
+            out.println("<tr><td colspan='4' class='text-center'>Nu exista date pentru aceasta liga.</td></tr>");
+        } else {
+            int rank = 1;
+            for (TeamStats team : standings) {
+                String rowClass = (rank <= 3) ? "table-success" : ""; // Evidentiem Top 3
+                out.println("<tr class='" + rowClass + "'>");
+                out.println("<td>" + (rank++) + "</td>");
+                out.println("<td class='fw-bold'>" + team.getTeamName() + "</td>");
+                out.println("<td class='text-center'>" + team.getPlayed() + "</td>");
+                out.println("<td class='text-center fs-5'><strong>" + team.getPoints() + "</strong></td>");
+                out.println("</tr>");
+            }
+        }
+        out.println("</tbody></table>");
+        out.println("</div></div>");
+    }
+
+    private void renderTeamGames(PrintWriter out, String teamId, String teamName) {
+        out.println("<div class='card shadow-sm'>");
+        out.println("<div class='card-header bg-success text-white'>");
+        out.println("<h4 class='my-0'>Istoric Meciuri: " + teamName + "</h4>");
+        out.println("</div>");
+        out.println("<div class='card-body'>");
+
+        out.println("<table class='table table-bordered table-hover'>");
+        out.println("<thead class='table-light'><tr><th class='w-40'>Gazda</th><th class='text-center w-20'>Scor</th><th class='w-40 text-end'>Oaspete</th></tr></thead>");
+        out.println("<tbody>");
+
+        List<Game> games = ejbRequest.getTeamGames(teamId);
+        if (games.isEmpty()) {
+            out.println("<tr><td colspan='3' class='text-center text-muted'>Niciun meci jucat.</td></tr>");
+        } else {
+            for (Game g : games) {
+                out.println("<tr>");
+                out.println("<td>" + g.getHomeTeam().getName() + "</td>");
+                out.println("<td class='text-center fw-bold bg-light'>" + g.getHomeScore() + " - " + g.getAwayScore() + "</td>");
+                out.println("<td class='text-end'>" + g.getAwayTeam().getName() + "</td>");
+                out.println("</tr>");
+            }
+        }
+        out.println("</tbody></table>");
+        out.println("</div></div>");
     }
 
     private void insertInfo() {
         try {
+
             // Leagues
             ejbRequest.createLeague(new LeagueDetails("L1", "Mountain", "Soccer"));
             ejbRequest.createLeague(new LeagueDetails("L2", "Valley", "Basketball"));
             ejbRequest.createLeague(new LeagueDetails("L3", "Foothills", "Soccer"));
-            ejbRequest.createLeague(new LeagueDetails("L4", "Alpine", "Snowboarding"));
 
             // Teams
             ejbRequest.createTeamInLeague(new TeamDetails("T1", "Honey Bees", "Visalia"), "L1");
@@ -46,274 +121,44 @@ public class MainServlet extends HttpServlet {
             ejbRequest.createTeamInLeague(new TeamDetails("T3", "Deer", "Bodie"), "L2");
             ejbRequest.createTeamInLeague(new TeamDetails("T4", "Trout", "Truckee"), "L2");
 
-            ejbRequest.createTeamInLeague(new TeamDetails("T6", "Marmots", "Auburn"), "L3");
-            ejbRequest.createTeamInLeague(new TeamDetails("T7", "Bobcats", "Grass Valley"), "L3");
-            ejbRequest.createTeamInLeague(new TeamDetails("T8", "Beavers", "Placerville"), "L3");
-
-            ejbRequest.createTeamInLeague(new TeamDetails("T9", "Penguins", "Incline Village"), "L4");
-            ejbRequest.createTeamInLeague(new TeamDetails("T10", "Land Otters", "Tahoe City"), "L4");
-
-            // Players, Team T1
+            // Players
             ejbRequest.createPlayer("P1", "Phil Jones", "goalkeeper", 100.00);
             ejbRequest.addPlayer("P1", "T1");
-
-            ejbRequest.createPlayer("P2", "Alice Smith", "defender", 505.00);
-            ejbRequest.addPlayer("P2", "T1");
-
-            ejbRequest.createPlayer("P3", "Bob Roberts", "midfielder", 65.00);
-            ejbRequest.addPlayer("P3", "T1");
-
-            ejbRequest.createPlayer("P4", "Grace Phillips", "forward", 100.00);
-            ejbRequest.addPlayer("P4", "T1");
-
-            ejbRequest.createPlayer("P5", "Barney Bold", "defender", 100.00);
-            ejbRequest.addPlayer("P5", "T1");
-
-            // Players, Team T2
             ejbRequest.createPlayer("P6", "Ian Carlyle", "goalkeeper", 555.00);
             ejbRequest.addPlayer("P6", "T2");
 
-            ejbRequest.createPlayer("P7", "Rebecca Struthers", "midfielder", 777.00);
-            ejbRequest.addPlayer("P7", "T2");
+            // T1 vs T2 (2-1) -> T1 castiga 3p
+            ejbRequest.createGame("L1", "T1", "T2", 2, 1);
 
-            ejbRequest.createPlayer("P8", "Anne Anderson", "forward", 65.00);
-            ejbRequest.addPlayer("P8", "T2");
+            // T5 vs T1 (0-3) -> T1 castiga 3p
+            ejbRequest.createGame("L1", "T5", "T1", 0, 3);
 
-            ejbRequest.createPlayer("P9", "Jan Wesley", "defender", 100.00);
-            ejbRequest.addPlayer("P9", "T2");
+            // T2 vs T5 (1-1) -> Egal 1p fiecare
+            ejbRequest.createGame("L1", "T2", "T5", 1, 1);
 
-            ejbRequest.createPlayer("P10", "Terry Smithson", "midfielder", 100.00);
-            ejbRequest.addPlayer("P10", "T2");
+            // T1 vs T5 (0-0) -> Egal 1p
+            ejbRequest.createGame("L1", "T1", "T5", 0, 0);
 
-            // Players, Team T3
-            ejbRequest.createPlayer("P11", "Ben Shore", "point guard", 188.00);
-            ejbRequest.addPlayer("P11", "T3");
+            // Rezultat asteptat pentru T1: 3 + 3 + 1 = 7 puncte
 
-            ejbRequest.createPlayer("P12", "Chris Farley", "shooting guard", 577.00);
-            ejbRequest.addPlayer("P12", "T3");
+            // 3. POPULAREA LIGII 2 (L2) - Basketball
+            // T3 vs T4 (80-75) -> T3 castiga 3p
+            ejbRequest.createGame("L2", "T3", "T4", 80, 75);
 
-            ejbRequest.createPlayer("P13", "Audrey Brown", "small forward", 995.00);
-            ejbRequest.addPlayer("P13", "T3");
+            // T4 vs T3 (88-85) -> T4 castiga 3p
+            ejbRequest.createGame("L2", "T4", "T3", 88, 85);
 
-            ejbRequest.createPlayer("P14", "Jack Patterson", "power forward", 100.00);
-            ejbRequest.addPlayer("P14", "T3");
+            // T3 vs T4 (92-92) -> Egal 1p fiecare
+            ejbRequest.createGame("L2", "T3", "T4", 92, 92);
 
-            ejbRequest.createPlayer("P15", "Candace Lewis", "point guard", 100.00);
-            ejbRequest.addPlayer("P15", "T3");
+            // T4 vs T3 (78-81) -> T3 castiga 3p
+            ejbRequest.createGame("L2", "T4", "T3", 78, 81);
 
-            // Players, Team T4
-            ejbRequest.createPlayer("P16", "Linda Berringer", "point guard", 844.00);
-            ejbRequest.addPlayer("P16", "T4");
-
-            ejbRequest.createPlayer("P17", "Bertrand Morris", "shooting guard", 452.00);
-            ejbRequest.addPlayer("P17", "T4");
-
-            ejbRequest.createPlayer("P18", "Nancy White", "small forward", 833.00);
-            ejbRequest.addPlayer("P18", "T4");
-
-            ejbRequest.createPlayer("P19", "Billy Black", "power forward", 444.00);
-            ejbRequest.addPlayer("P19", "T4");
-
-            ejbRequest.createPlayer("P20", "Jodie James", "point guard", 100.00);
-            ejbRequest.addPlayer("P20", "T4");
-
-            // Players, Team T5
-            ejbRequest.createPlayer("P21", "Henry Shute", "goalkeeper", 205.00);
-            ejbRequest.addPlayer("P21", "T5");
-
-            ejbRequest.createPlayer("P22", "Janice Walker", "defender", 857.00);
-            ejbRequest.addPlayer("P22", "T5");
-
-            ejbRequest.createPlayer("P23", "Wally Hendricks", "midfielder", 748.00);
-            ejbRequest.addPlayer("P23", "T5");
-
-            ejbRequest.createPlayer("P24", "Gloria Garber", "forward", 777.00);
-            ejbRequest.addPlayer("P24", "T5");
-
-            ejbRequest.createPlayer("P25", "Frank Fletcher", "defender", 399.00);
-            ejbRequest.addPlayer("P25", "T5");
-
-            // Players, Team T9
-            ejbRequest.createPlayer("P30", "Lakshme Singh", "downhill", 450.00);
-            ejbRequest.addPlayer("P30", "T9");
-
-            ejbRequest.createPlayer("P31", "Mariela Prieto", "freestyle", 420.00);
-            ejbRequest.addPlayer("P31", "T9");
-
-            // Players, Team T10
-            ejbRequest.createPlayer("P32", "Soren Johannsen", "freestyle", 375.00);
-            ejbRequest.addPlayer("P32", "T10");
-
-            ejbRequest.createPlayer("P33", "Andre Gerson", "freestyle", 396.00);
-            ejbRequest.addPlayer("P33", "T10");
-
-            ejbRequest.createPlayer("P34", "Zoria Lepsius", "downhill", 431.00);
-            ejbRequest.addPlayer("P34", "T10");
-
-            // Players, no team
-            ejbRequest.createPlayer("P26", "Hobie Jackson", "pitcher", 582.00);
-            ejbRequest.createPlayer("P27", "Melinda Kendall", "catcher", 677.00);
-
-            // Players, multiple teams
-            ejbRequest.createPlayer("P28", "Constance Adams", "substitute", 966.00);
-            ejbRequest.addPlayer("P28", "T1");
-            ejbRequest.addPlayer("P28", "T3");
-
-            // Adding existing players to second soccer league
-            ejbRequest.addPlayer("P24", "T6");
-            ejbRequest.addPlayer("P21", "T6");
-            ejbRequest.addPlayer("P9", "T6");
-            ejbRequest.addPlayer("P7", "T5");
+            // Rezultat asteptat: T3 = 3 + 3 + 1 = 7 puncte, T4 = 3 + 1 = 4 puncte
 
         } catch (Exception ex) {
-            printer.println("Caught an exception: " + ex.getClass() + " : " + ex.getMessage());
-            ex.printStackTrace(printer);
+            // Prindem exceptia si o afisam in consola serverului
+            ex.printStackTrace();
         }
-    }
-
-    private void getSomeInfo() {
-        try {
-            List<PlayerDetails> playerList;
-            List<TeamDetails> teamList;
-            List<LeagueDetails> leagueList;
-
-            printer.println("List all players in team T2: ");
-            playerList = ejbRequest.getPlayersOfTeam("T2");
-            printDetailsList(playerList);
-            printer.println();
-
-            printer.println("List all teams in league L1: ");
-            teamList = ejbRequest.getTeamsOfLeague("L1");
-            printDetailsList(teamList);
-            printer.println();
-
-            printer.println("List all defenders: ");
-            playerList = ejbRequest.getPlayersByPosition("defender");
-            printDetailsList(playerList);
-            printer.println();
-
-            printer.println("List the leagues of player P28: ");
-            leagueList = ejbRequest.getLeaguesOfPlayer("P28");
-            printDetailsList(leagueList);
-            printer.println();
-
-        } catch (Exception ex) {
-            printer.println("Caught an exception: " + ex.getClass() + " : " + ex.getMessage());
-            ex.printStackTrace(printer);
-        }
-    }
-
-    private void getMoreInfo() {
-        try {
-            LeagueDetails leagueDetails;
-            TeamDetails teamDetails;
-            PlayerDetails playerDetails;
-            List<PlayerDetails> playerList;
-            List<TeamDetails> teamList;
-            List<LeagueDetails> leagueList;
-            List<String> sportList;
-
-            printer.println("Details of league L1: ");
-            leagueDetails = ejbRequest.getLeague("L1");
-            printer.println(leagueDetails.toString());
-            printer.println();
-
-            printer.println("Details of team T3: ");
-            teamDetails = ejbRequest.getTeam("T3");
-            printer.println(teamDetails.toString());
-            printer.println();
-
-            printer.println("Details of player P20: ");
-            playerDetails = ejbRequest.getPlayer("P20");
-            printer.println(playerDetails.toString());
-            printer.println();
-
-            printer.println("List all teams in league L3: ");
-            teamList = ejbRequest.getTeamsOfLeague("L3");
-            printDetailsList(teamList);
-            printer.println();
-
-            printer.println("List all players: ");
-            playerList = ejbRequest.getAllPlayers();
-            printDetailsList(playerList);
-            printer.println();
-
-            printer.println("List all players not on a team: ");
-            playerList = ejbRequest.getPlayersNotOnTeam();
-            printDetailsList(playerList);
-            printer.println();
-
-            printer.println("Details of Jack Patterson, a power forward: ");
-            playerList = ejbRequest.getPlayersByPositionAndName("power forward", "Jack Patterson");
-            printDetailsList(playerList);
-            printer.println();
-
-            printer.println("List all players in the city of Truckee: ");
-            playerList = ejbRequest.getPlayersByCity("Truckee");
-            printDetailsList(playerList);
-            printer.println();
-
-            printer.println("List all soccer players: ");
-            playerList = ejbRequest.getPlayersBySport("Soccer");
-            printDetailsList(playerList);
-            printer.println();
-
-            printer.println("List all players in league L1: ");
-            playerList = ejbRequest.getPlayersByLeagueId("L1");
-            printDetailsList(playerList);
-            printer.println();
-
-            printer.println("List all players making a higher salary than Ian Carlyle: ");
-            playerList = ejbRequest.getPlayersByHigherSalary("Ian Carlyle");
-            printDetailsList(playerList);
-            printer.println();
-
-            printer.println("List all players with a salary between 500 and 800: ");
-            playerList = ejbRequest.getPlayersBySalaryRange(500.00, 800.00);
-            printDetailsList(playerList);
-            printer.println();
-
-            printer.println("List all players of team T5: ");
-            playerList = ejbRequest.getPlayersOfTeam("T5");
-            printDetailsList(playerList);
-            printer.println();
-
-            printer.println("List all the leagues of player P28: ");
-            leagueList = ejbRequest.getLeaguesOfPlayer("P28");
-            printDetailsList(leagueList);
-            printer.println();
-
-            printer.println("List all the sports of player P28: ");
-            sportList = ejbRequest.getSportsOfPlayer("P28");
-            printDetailsList(sportList);
-            printer.println();
-
-        } catch (Exception ex) {
-            printer.println("Caught an exception: " + ex.getClass() + " : " + ex.getMessage());
-            ex.printStackTrace(printer);
-        }
-    }
-
-    private void removeInfo() {
-        try {
-            printer.println("Removing team T6. ");
-            ejbRequest.removeTeam("T6");
-            printer.println();
-
-            printer.println("Removing player P24 ");
-            ejbRequest.removePlayer("P24");
-            printer.println();
-
-        } catch (Exception ex) {
-            printer.println("Caught an exception: " + ex.getClass() + " : " + ex.getMessage());
-            ex.printStackTrace(printer);
-        }
-    }
-
-    private void printDetailsList(List list) {
-        for (Object details : list) {
-            printer.println(details.toString());
-        }
-        printer.println();
     }
 }
